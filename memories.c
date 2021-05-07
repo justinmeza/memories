@@ -5,6 +5,15 @@
 #include <stdio.h>
 #include <GL/glut.h>
 
+const int data_size = 1 << 4;
+int* data;
+void create_data() {
+    data = malloc(sizeof(int) * data_size);
+    for (int n = 0; n < data_size; n++) {
+        data[n] = rand();
+    }
+}
+
 GLfloat ASPECT;
 
 void init(void)
@@ -15,6 +24,10 @@ void init(void)
     /* glDepthFunc(GL_LEQUAL); */
     /* glShadeModel(GL_SMOOTH); */
     /* glHint(GL_PERSPECTIVE_CORRECTION_HINT, GL_NICEST); */
+
+    time_t t;
+    srand((unsigned) time(&t));
+    create_data();
 }
 
 /* x points rightward, out of the screen
@@ -61,7 +74,15 @@ void display() {
 
     glEnd();
 
-    draw_cube(0, 0, 0, 0, 1, 0);
+    /* draw a range of memory */
+    unsigned char* addr = (char *)data;
+
+    float r = addr[0] / 255.0;
+    float g = addr[1] / 255.0;
+    float b = addr[2] / 255.0;
+    printf("r = %f, g = %f, b = %f", r, g, b);
+    fflush(stdout);
+    draw_cube(0, 0, 0, r, g, b);
     draw_cube(0, 0, 1, 1, 0, 0);
 
     glDisable(GL_BLEND);
