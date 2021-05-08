@@ -3,18 +3,21 @@
 
 #include <math.h>
 #include <stdio.h>
+#include <stdlib.h>
+#include <time.h>
 #include <GL/glut.h>
 
-const int data_size = 1 << 4;
+const int data_size = 1 << 8;
 int* data;
 void create_data() {
     data = malloc(sizeof(int) * data_size);
     for (int n = 0; n < data_size; n++) {
         data[n] = rand();
+        /* printf("n = %d, data[n] = %d\n", n, data[n]); */
     }
 }
 
-GLfloat ASPECT;
+GLfloat aspect;
 
 void init(void)
 {
@@ -25,8 +28,7 @@ void init(void)
     /* glShadeModel(GL_SMOOTH); */
     /* glHint(GL_PERSPECTIVE_CORRECTION_HINT, GL_NICEST); */
 
-    time_t t;
-    srand((unsigned) time(&t));
+    srand(time(NULL));
     create_data();
 }
 
@@ -34,16 +36,20 @@ void init(void)
  * y points leftward, out of the screen
  * z points upward, parallel to the screen
  */
-void draw_cube(int x, int y, int z, float r, float g, float b)
+void draw_cube(int x, int y, int z, float r, float g, float b, float a)
 {
     double dist = sqrt(1 / 3.0);
     glPushMatrix();
     glTranslated(z, y, x);
-    glColor4d(r, g, b, 0.25);
+    glColor4d(r, g, b, a);
     glutSolidCube(1);
     /* glutWireCube(1); */
     glPopMatrix();
 }
+
+int x_size = 4;
+int y_size = 4;
+int z_size = 4;
 
 void display() {
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
@@ -75,15 +81,28 @@ void display() {
     glEnd();
 
     /* draw a range of memory */
-    unsigned char* addr = (char *)data;
+    int* base = data;
 
-    float r = addr[0] / 255.0;
-    float g = addr[1] / 255.0;
-    float b = addr[2] / 255.0;
-    printf("r = %f, g = %f, b = %f", r, g, b);
-    fflush(stdout);
-    draw_cube(0, 0, 0, r, g, b);
-    draw_cube(0, 0, 1, 1, 0, 0);
+    for (int z = 0; z < z_size; z++) {
+        for (int y = 0; y < y_size; y++) {
+            for (int x = 0; x < z_size; x++) {
+                int offset = z * (x_size * y_size) + y * y_size + x;
+                unsigned int* addr = base + offset;
+                /* printf("offset = %d, data[offset] = %d\n", offset, *addr); */
+                /* fflush(stdout); */
+                unsigned char* color = (unsigned char*)addr;
+
+                float r = color[0] / 255.0;
+                /* printf("r = %f\n", r); */
+                /* fflush(stdout); */
+                float g = color[1] / 255.0;
+                float b = color[2] / 255.0;
+                float a = color[3] / 255.0;
+
+                draw_cube(x, y, z, r, g, b, a);
+            }
+        }
+    }
 
     glDisable(GL_BLEND);
 
@@ -93,7 +112,7 @@ void display() {
 }
 
 void reshape(GLsizei width, GLsizei height) {
-    ASPECT = (GLfloat)width / (GLfloat)height;
+    aspect = (GLfloat)width / (GLfloat)height;
 
     /* render on entire window */
     glViewport(0, 0, width, height);
@@ -102,7 +121,7 @@ void reshape(GLsizei width, GLsizei height) {
     glLoadIdentity();
 
     /* ensure unit axes are equal length on the screen */
-    glOrtho(-10.0f * ASPECT, 10.0f * ASPECT, -10.0f, 10.0f, -10.0f, 10.0f);
+    glOrtho(-10.0f * aspect, 10.0f * aspect, -10.0f, 10.0f, -10.0f, 10.0f);
 
     /* use this length so that camera is 1 unit away from origin */
     double dist = sqrt(1 / 3.0);
@@ -121,9 +140,9 @@ int main(int argc, char** argv)
     glutInitWindowSize(500, 500);
     glutInitWindowPosition(50, 50);
     glutCreateWindow("memories");
+    init();
     glutDisplayFunc(display);
     glutReshapeFunc(reshape);
-    init();
     glutMainLoop();
 
     return 0;
