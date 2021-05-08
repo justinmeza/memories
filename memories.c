@@ -24,6 +24,7 @@ void init(void)
     glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
     /* glClearDepth(1.0f); */
     glEnable(GL_DEPTH_TEST);
+    glEnable(GL_DEPTH_CLAMP);
     /* glDepthFunc(GL_LEQUAL); */
     /* glShadeModel(GL_SMOOTH); */
     /* glHint(GL_PERSPECTIVE_CORRECTION_HINT, GL_NICEST); */
@@ -36,20 +37,25 @@ void init(void)
  * y points leftward, out of the screen
  * z points upward, parallel to the screen
  */
+float cube_size = 2.0;
+float cube_padding = 0.0;
 void draw_cube(int x, int y, int z, float r, float g, float b, float a)
 {
     double dist = sqrt(1 / 3.0);
     glPushMatrix();
-    glTranslated(z, y, x);
+    glTranslated(z * cube_size, y * cube_size, x * cube_size);
     glColor4d(r, g, b, a);
-    glutSolidCube(1);
+    glutSolidCube(cube_size - cube_padding);
     /* glutWireCube(1); */
     glPopMatrix();
 }
 
-int x_size = 4;
-int y_size = 4;
-int z_size = 4;
+int x_size = 1 << 4;
+int y_size = 1 << 4;
+int z_size = 1 << 4;
+int x_offset = 0;
+int y_offset = 0;
+int z_offset = 0;
 
 void display() {
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
@@ -86,15 +92,14 @@ void display() {
     for (int z = 0; z < z_size; z++) {
         for (int y = 0; y < y_size; y++) {
             for (int x = 0; x < z_size; x++) {
-                int offset = z * (x_size * y_size) + y * y_size + x;
+                int offset = (z + z_offset) * (x_size * y_size) \
+                             + (y + y_offset) * y_size + (x + x_offset);
                 unsigned int* addr = base + offset;
                 /* printf("offset = %d, data[offset] = %d\n", offset, *addr); */
                 /* fflush(stdout); */
                 unsigned char* color = (unsigned char*)addr;
 
                 float r = color[0] / 255.0;
-                /* printf("r = %f\n", r); */
-                /* fflush(stdout); */
                 float g = color[1] / 255.0;
                 float b = color[2] / 255.0;
                 float a = color[3] / 255.0;
@@ -121,7 +126,8 @@ void reshape(GLsizei width, GLsizei height) {
     glLoadIdentity();
 
     /* ensure unit axes are equal length on the screen */
-    glOrtho(-10.0f * aspect, 10.0f * aspect, -10.0f, 10.0f, -10.0f, 10.0f);
+    float ortho = 10.0 * (y_size / 3.0);
+    glOrtho(-ortho * aspect, ortho * aspect, -ortho, ortho, -ortho, ortho);
 
     /* use this length so that camera is 1 unit away from origin */
     double dist = sqrt(1 / 3.0);
@@ -131,6 +137,26 @@ void reshape(GLsizei width, GLsizei height) {
             0.0,  0.0,  0.0,   /* where camera is pointing at */
             1.0,  0.0,  0.0);  /* which direction is up */
     glMatrixMode(GL_MODELVIEW);
+}
+
+void keyboard(unsigned char key, int x, int y)
+{
+    switch (key) {
+        case 'j':
+            z_offset--;
+            break;
+        case 'k':
+            z_offset++;
+            break;
+        case 'b':
+            z_offset = z_offset - z_size;
+            break;
+        case 'f':
+            z_offset = z_offset + z_size;
+            break;
+    }
+
+    glutPostRedisplay();
 }
 
 int main(int argc, char** argv)
@@ -143,6 +169,7 @@ int main(int argc, char** argv)
     init();
     glutDisplayFunc(display);
     glutReshapeFunc(reshape);
+    glutKeyboardFunc(keyboard);
     glutMainLoop();
 
     return 0;
