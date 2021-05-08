@@ -12,6 +12,7 @@
 #include <signal.h>
 #include <time.h>
 #include <sys/ucontext.h>
+#include <unistd.h>
 
 #define DEBUG
 
@@ -100,7 +101,7 @@ void create_data() {
     }
 }
 
-GLfloat aspect;
+int* base;
 
 void init(void)
 {
@@ -108,12 +109,13 @@ void init(void)
     /* glClearDepth(1.0f); */
     glEnable(GL_DEPTH_TEST);
     glEnable(GL_DEPTH_CLAMP);
-    /* glDepthFunc(GL_LEQUAL); */
-    /* glShadeModel(GL_SMOOTH); */
-    /* glHint(GL_PERSPECTIVE_CORRECTION_HINT, GL_NICEST); */
+    glDepthFunc(GL_LEQUAL);
+    glShadeModel(GL_SMOOTH);
+    glHint(GL_PERSPECTIVE_CORRECTION_HINT, GL_NICEST);
 
     srand(time(NULL));
     create_data();
+    base = data;
 
     /* set up the signal handler */
     struct sigaction action;
@@ -193,7 +195,6 @@ void display() {
     /* glEnd(); */
 
     /* draw a range of memory */
-    int* base = data;
 
     for (int z = 0; z < z_size; z++) {
         for (int y = 0; y < y_size; y++) {
@@ -226,7 +227,7 @@ void display() {
 }
 
 void reshape(GLsizei width, GLsizei height) {
-    aspect = (GLfloat)width / (GLfloat)height;
+    GLfloat aspect = (GLfloat)width / (GLfloat)height;
 
     /* render on entire window */
     glViewport(0, 0, width, height);
@@ -235,7 +236,8 @@ void reshape(GLsizei width, GLsizei height) {
     glLoadIdentity();
 
     /* place the camera at a distance to reduce near clipping */
-    float ortho = 10.0 * (y_size / 3.0);
+    /* float ortho = 10.0 * (y_size / 3.0); */
+    float ortho = 50.0;
 
     /* ensure unit axes are equal length on the screen */
     glOrtho(-ortho * aspect, ortho * aspect, -ortho, ortho, -ortho, ortho);
@@ -247,8 +249,10 @@ void reshape(GLsizei width, GLsizei height) {
     gluLookAt(dist, dist, dist,  /* position of camera */
             0.0,  0.0,  0.0,   /* where camera is pointing at */
             1.0,  0.0,  0.0);  /* which direction is up */
-    glMatrixMode(GL_MODELVIEW);
+    /* glMatrixMode(GL_MODELVIEW); */
 }
+
+extern char etext, edata, end;
 
 void keyboard(unsigned char key, int x, int y)
 {
@@ -283,6 +287,34 @@ void keyboard(unsigned char key, int x, int y)
             x_size++;
             y_size++;
             z_size++;
+            break;
+        /* jump to text segment */
+        case 't':
+            base = (int *)&etext;
+            x_offset = 0;
+            y_offset = 0;
+            z_offset = 0;
+            break;
+        /* jump to data segment */
+        case 'd':
+            base = (int *)&edata;
+            x_offset = 0;
+            y_offset = 0;
+            z_offset = 0;
+            break;
+        /* jump to end segment */
+        case 'e':
+            base = (int *)&end;
+            x_offset = 0;
+            y_offset = 0;
+            z_offset = 0;
+            break;
+        /* jump to address */
+        case 'a':
+            base = data;
+            x_offset = 0;
+            y_offset = 0;
+            z_offset = 0;
             break;
         /* take a snapshot */
         case 's':
