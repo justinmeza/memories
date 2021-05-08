@@ -1,11 +1,78 @@
 /* memories visualizes the contents of main memory.
 */
 
+#include <GL/glut.h>
 #include <math.h>
+#include <signal.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
+#include <sys/signal.h>
 #include <time.h>
-#include <GL/glut.h>
+#include <sys/ucontext.h>
+
+/* TODO: debug how to include these definitions from /usr/include/x86_64-linux-gnu/sys/ucontext.h */
+enum
+{
+  REG_R8 = 0,
+# define REG_R8		REG_R8
+  REG_R9,
+# define REG_R9		REG_R9
+  REG_R10,
+# define REG_R10	REG_R10
+  REG_R11,
+# define REG_R11	REG_R11
+  REG_R12,
+# define REG_R12	REG_R12
+  REG_R13,
+# define REG_R13	REG_R13
+  REG_R14,
+# define REG_R14	REG_R14
+  REG_R15,
+# define REG_R15	REG_R15
+  REG_RDI,
+# define REG_RDI	REG_RDI
+  REG_RSI,
+# define REG_RSI	REG_RSI
+  REG_RBP,
+# define REG_RBP	REG_RBP
+  REG_RBX,
+# define REG_RBX	REG_RBX
+  REG_RDX,
+# define REG_RDX	REG_RDX
+  REG_RAX,
+# define REG_RAX	REG_RAX
+  REG_RCX,
+# define REG_RCX	REG_RCX
+  REG_RSP,
+# define REG_RSP	REG_RSP
+  REG_RIP,
+# define REG_RIP	REG_RIP
+  REG_EFL,
+# define REG_EFL	REG_EFL
+  REG_CSGSFS,		/* Actually short cs, gs, fs, __pad0.  */
+# define REG_CSGSFS	REG_CSGSFS
+  REG_ERR,
+# define REG_ERR	REG_ERR
+  REG_TRAPNO,
+# define REG_TRAPNO	REG_TRAPNO
+  REG_OLDMASK,
+# define REG_OLDMASK	REG_OLDMASK
+  REG_CR2
+# define REG_CR2	REG_CR2
+};
+
+/* segfault handler */
+void handler(int num, siginfo_t* info, void* context)
+{
+    ucontext_t* c = (ucontext_t*)context;
+
+    /* increment the instruction pointer to get past the load */
+    c->uc_mcontext.__gregs[REG_RIP]++;
+
+    /* provide a default value for the inaccessible location */
+    c->uc_mcontext.__gregs[REG_RAX] = 0x0;
+}
 
 const int data_size = 1 << 8;
 int* data;
@@ -31,6 +98,13 @@ void init(void)
 
     srand(time(NULL));
     create_data();
+
+    /* set up the signal handler */
+    struct sigaction action;
+    memset(&action, 0, sizeof(struct sigaction));
+    action.sa_flags = SA_SIGINFO;
+    action.sa_sigaction = handler;
+    sigaction(SIGSEGV, &action, NULL);
 }
 
 /* x points rightward, out of the screen
