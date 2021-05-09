@@ -12,6 +12,7 @@
 #include <string.h>
 #include <signal.h>
 #include <time.h>
+#include <fcntl.h>
 #include <sys/types.h>
 #include <sys/ucontext.h>
 #include <sys/wait.h>
@@ -94,12 +95,13 @@ void handler(int num, siginfo_t* info, void* context)
     c->uc_mcontext.__gregs[REG_RAX] = 0x0;
 }
 
-const int data_size = 1 << 8;
+const int data_size = 1 << 20;
 static int* data;
-void create_data() {
-    data = malloc(sizeof(int) * data_size);
+void init_data() {
+    /* data = malloc(sizeof(int) * data_size); */
     for (int n = 0; n < data_size; n++) {
-        data[n] = rand();
+        /* data[n] = rand(); */
+        data[n] = 0;
         /* printf("n = %d, data[n] = %d\n", n, data[n]); */
     }
 }
@@ -109,6 +111,7 @@ int* base;
 void init(void)
 {
     glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
+    /* glClearColor(1.0f, 1.0f, 1.0f, 1.0f); */
     /* glClearDepth(1.0f); */
     glEnable(GL_DEPTH_TEST);
     glEnable(GL_DEPTH_CLAMP);
@@ -117,7 +120,7 @@ void init(void)
     glHint(GL_PERSPECTIVE_CORRECTION_HINT, GL_NICEST);
 
     srand(time(NULL));
-    /* create_data(); */
+    /* init_data(); */
     base = data;
 
     /* set up the signal handler */
@@ -151,6 +154,7 @@ int z_size = (1 << 4) - 1;
 int x_offset = 0;
 int y_offset = 0;
 int z_offset = 0;
+int z_toggle = 0xffffffff;
 
 int* compute_addr(int* base, int x, int y, int z) {
     int offset = (z + z_offset) * (x_size * y_size) \
@@ -177,8 +181,8 @@ void display() {
     glEnable(GL_BLEND);
     glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 
-    glClearColor(0.0, 0.0, 0.0, 1.0);
-    glClear(GL_COLOR_BUFFER_BIT);
+    /* glClearColor(0.0, 0.0, 0.0, 1.0); */
+    /* glClear(GL_COLOR_BUFFER_BIT); */
 
     /* draw axes */
     /* glBegin(GL_LINES); */
@@ -200,6 +204,7 @@ void display() {
     /* draw a range of memory */
 
     for (int z = 0; z < z_size; z++) {
+        if (((z_toggle >> z) & 0x1) == 0) continue;
         for (int y = 0; y < y_size; y++) {
             for (int x = 0; x < z_size; x++) {
                 unsigned int* addr = compute_addr(base, x, y, z);
@@ -229,6 +234,8 @@ void display() {
     glutSwapBuffers();
 }
 
+float zoom = 1.0;
+
 void reshape(GLsizei width, GLsizei height) {
     GLfloat aspect = (GLfloat)width / (GLfloat)height;
 
@@ -240,7 +247,7 @@ void reshape(GLsizei width, GLsizei height) {
 
     /* place the camera at a distance to reduce near clipping */
     /* float ortho = 10.0 * (y_size / 3.0); */
-    float ortho = 50.0;
+    float ortho = 50.0 * (1.0 / zoom);
 
     /* ensure unit axes are equal length on the screen */
     glOrtho(-ortho * aspect, ortho * aspect, -ortho, ortho, -ortho, ortho);
@@ -280,17 +287,54 @@ void keyboard(unsigned char key, int x, int y)
             z_offset = z_offset + z_size;
             break;
         /* zoom out by one block */
-        case '-':
+        case '+':
             x_size--;
             y_size--;
             z_size--;
             break;
         /* zoom in by one block */
-        case '+':
+        case '-':
             x_size++;
             y_size++;
             z_size++;
             break;
+        /* toggle z layers */
+        case '0':
+        case '1':
+        case '2':
+        case '3':
+        case '4':
+        case '5':
+        case '6':
+        case '7':
+        case '8':
+        case '9':
+            {
+                int index = key - '0';
+                z_toggle ^= (1 << index);
+                break;
+            }
+        /* zoom in */
+        case 'h':
+            {
+                zoom -= 0.1;
+                int screen[4];
+                glGetIntegerv(GL_VIEWPORT, screen);
+                int width = screen[2];
+                int height = screen[3];
+                reshape(width, height);
+                break;
+            }
+        case 'l':
+            {
+                zoom += 0.1;
+                int screen[4];
+                glGetIntegerv(GL_VIEWPORT, screen);
+                int width = screen[2];
+                int height = screen[3];
+                reshape(width, height);
+                break;
+            }
         /* jump to text segment */
         case 't':
             base = (int *)&etext;
@@ -391,43 +435,97 @@ void keyboard(unsigned char key, int x, int y)
 double sigmoid(double x) { return 1 / (1 + exp(-x)); }
 double dSigmoid(double x) { return x * (1 - x); }
 double init_weight() { return ((double)rand())/((double)RAND_MAX); }
+void shuffle(int *array, size_t n)
+{
+    if (n > 1)
+    {
+        size_t i;
+        for (i = 0; i < n - 1; i++)
+        {
+          size_t j = i + rand() / (RAND_MAX / (n - i) + 1);
+          int t = array[j];
+          array[j] = array[i];
+          array[i] = t;
+        }
+    }
+}
+
+int *map(int *data, int *offset, int size, int num)
+{
+    int *addr = data + *offset;
+    *offset = *offset + (size * num);
+    return addr;
+}
 
 /* From https://towardsdatascience.com/simple-neural-network-implementation-in-c-663f51447547 */
 void nn_sgd() {
     static const int numInputs = 2;
     static const int numHiddenNodes = 2;
     static const int numOutputs = 1;
-    double hiddenLayer[numHiddenNodes];
-    double outputLayer[numOutputs];
-    double hiddenLayerBias[numHiddenNodes];
-    double outputLayerBias[numOutputs];
-    double hiddenWeights[numInputs][numHiddenNodes];
-    double outputWeights[numHiddenNodes][numOutputs];
+    /* double hiddenLayer[numHiddenNodes]; */
+    /* double outputLayer[numOutputs]; */
+    /* double hiddenLayerBias[numHiddenNodes]; */
+    /* double outputLayerBias[numOutputs]; */
+    /* double hiddenWeights[numInputs][numHiddenNodes]; */
+    /* double outputWeights[numHiddenNodes][numOutputs]; */
+
+    /* map the variables into data */
+    int offset = 0;
+    double *hiddenLayer = (double *)map(data, &offset, sizeof(double), numHiddenNodes);
+    double *outputLayer = (double *)map(data, &offset, sizeof(double), numOutputs);
+    double *hiddenLayerBias = (double *)map(data, &offset, sizeof(double), numHiddenNodes);
+    double *outputLayerBias = (double *)map(data, &offset, sizeof(double), numOutputs);
+
+    double **hiddenWeights = (double **)map(data, &offset, sizeof(double *), numInputs);
+    for (int n = 0; n < numInputs; n++) { hiddenWeights[n] = (double *)map(data, &offset, sizeof(double), numHiddenNodes); }
+
+    /* double **outputWeights = (double **)map(data, &offset, sizeof(double *), numHiddenNodes + 1); */
+    /* for (int n = 0; n < numHiddenNodes + 1; n++) { outputWeights[n] = (double *)map(data, &offset, sizeof(double), numOutputs); } */
+
+    double **outputWeights = (double **)map(data, &offset, sizeof(double *), numHiddenNodes);
+    for (int n = 0; n < numHiddenNodes; n++) { outputWeights[n] = (double *)map(data, &offset, sizeof(double), numOutputs); }
 
     for (int n = 0; n < numInputs; n++) {
         for (int o = 0; o < numHiddenNodes; o++) {
             hiddenWeights[n][o] = init_weight();
         }
     }
+
     for (int n = 0; n < numHiddenNodes; n++) {
         for (int o = 0; o < numOutputs; o++) {
             outputWeights[n][o] = init_weight();
         }
     }
 
+    /* int **hiddenWeightsInt = (int **)map(data, &offset, sizeof(int *), numInputs); */
+    /* for (int n = 0; n < numInputs; n++) { hiddenWeightsInt[n] = (int *)map(data, &offset, sizeof(int), numHiddenNodes); } */
+
+    /* memset(outputWeights[numHiddenNodes], 0xffffffff, sizeof(int)); */
+
     static const int numTrainingSets = 4;
-    /* numTrainingSets x numInputs */
-    /* TODO: make this dynamic */
-    double training_inputs[4][2] = { {0.0f,0.0f},{1.0f,0.0f},{0.0f,1.0f},{1.0f,1.0f} };
-    double training_outputs[4][2] = { {0.0f},{1.0f},{1.0f},{0.0f} };
+    double **training_inputs = (double **)map(data, &offset, sizeof(double *), numTrainingSets);
+    for (int n = 0; n < numTrainingSets; n++) { training_inputs[n] = (double *)map(data, &offset, sizeof(double), numInputs); }
+    double **training_outputs = (double **)map(data, &offset, sizeof(double *), numTrainingSets);
+    for (int n = 0; n < numTrainingSets; n++) { training_outputs[n] = (double *)map(data, &offset, sizeof(double), numOutputs); }
+
+    /* xor */
+    training_inputs[0] = (double[2]){0.0f,0.0f};
+    training_inputs[1] = (double[2]){1.0f,0.0f};
+    training_inputs[2] = (double[2]){0.0f,1.0f};
+    training_inputs[3] = (double[2]){1.0f,1.0f};
+    /* memset(training_inputs[4], 0xffffffff, sizeof(double) * 2); */
+    training_outputs[0] = (double[1]){0.0f};
+    training_outputs[1] = (double[1]){1.0f};
+    training_outputs[2] = (double[1]){1.0f};
+    training_outputs[3] = (double[1]){0.0f};
+    /* memset(training_outputs[4], 0xffffffff, sizeof(double) * 1); */
 
     // Iterate through the entire training for a number of epochs
     int epochs = 10000;
     for (int n=0; n < epochs; n++) {
         // As per SGD, shuffle the order of the training set
         int trainingSetOrder[] = {0,1,2,3};
-        /* TODO: implement this */
-        /* shuffle(trainingSetOrder,numTrainingSets); */
+        shuffle(trainingSetOrder,numTrainingSets);
 
         // Cycle through each of the training set elements
         for (int x=0; x<numTrainingSets; x++) {
@@ -481,11 +579,12 @@ void nn_sgd() {
                 hiddenLayerBias[j] += deltaHidden[j]*lr;
                 for(int k=0; k<numInputs; k++) {
                     hiddenWeights[k][j]+=training_inputs[i][k]*deltaHidden[j]*lr;
+                    debug("hiddenWeight = %f\n", hiddenWeights[k][j]);
                 }
             }
         }
 
-        usleep(1000000);
+        usleep(10000);
     }
 }
 
@@ -508,13 +607,15 @@ void coroutine(void)
     nn_sgd();
 }
 
-/* TODO: fix this */
-#define MAP_ANONYMOUS 0x20
-
 int main(int argc, char** argv)
 {
-    data = mmap(NULL, sizeof *data, PROT_READ | PROT_WRITE, MAP_SHARED |
-            MAP_ANONYMOUS, -1, 0);
+    /* data = mmap(NULL, sizeof *data, PROT_READ | PROT_WRITE, MAP_SHARED | */
+    /*         MAP_ANONYMOUS, -1, 0); */
+    /* data = malloc(sizeof(int) * data_size); */
+    int f = open("/dev/zero", O_RDWR);
+    data = mmap(NULL, sizeof(int) * data_size, PROT_READ | PROT_WRITE, MAP_SHARED, f, 0);
+    init_data();
+    close(f);
 
     if (fork() == 0) {
         glutInit(&argc, argv);
