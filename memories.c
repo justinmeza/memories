@@ -3,6 +3,7 @@
 
 #include <GL/glut.h>
 #include <math.h>
+#include <sys/mman.h>
 #include <png.h>
 #include <signal.h>
 #include <stdarg.h>
@@ -11,7 +12,9 @@
 #include <string.h>
 #include <signal.h>
 #include <time.h>
+#include <sys/types.h>
 #include <sys/ucontext.h>
+#include <sys/wait.h>
 #include <unistd.h>
 
 #define DEBUG
@@ -92,7 +95,7 @@ void handler(int num, siginfo_t* info, void* context)
 }
 
 const int data_size = 1 << 8;
-int* data;
+static int* data;
 void create_data() {
     data = malloc(sizeof(int) * data_size);
     for (int n = 0; n < data_size; n++) {
@@ -114,7 +117,7 @@ void init(void)
     glHint(GL_PERSPECTIVE_CORRECTION_HINT, GL_NICEST);
 
     srand(time(NULL));
-    create_data();
+    /* create_data(); */
     base = data;
 
     /* set up the signal handler */
@@ -142,9 +145,9 @@ void draw_cube(int x, int y, int z, float r, float g, float b, float a)
     glPopMatrix();
 }
 
-int x_size = 1 << 4;
-int y_size = 1 << 4;
-int z_size = 1 << 4;
+int x_size = (1 << 4) - 1;
+int y_size = (1 << 4) - 1;
+int z_size = (1 << 4) - 1;
 int x_offset = 0;
 int y_offset = 0;
 int z_offset = 0;
@@ -383,18 +386,151 @@ void keyboard(unsigned char key, int x, int y)
     glutPostRedisplay();
 }
 
+/* coroutine definition */
+
+double sigmoid(double x) { return 1 / (1 + exp(-x)); }
+double dSigmoid(double x) { return x * (1 - x); }
+double init_weight() { return ((double)rand())/((double)RAND_MAX); }
+
+/* From https://towardsdatascience.com/simple-neural-network-implementation-in-c-663f51447547 */
+void nn_sgd() {
+    static const int numInputs = 2;
+    static const int numHiddenNodes = 2;
+    static const int numOutputs = 1;
+    double hiddenLayer[numHiddenNodes];
+    double outputLayer[numOutputs];
+    double hiddenLayerBias[numHiddenNodes];
+    double outputLayerBias[numOutputs];
+    double hiddenWeights[numInputs][numHiddenNodes];
+    double outputWeights[numHiddenNodes][numOutputs];
+
+    for (int n = 0; n < numInputs; n++) {
+        for (int o = 0; o < numHiddenNodes; o++) {
+            hiddenWeights[n][o] = init_weight();
+        }
+    }
+    for (int n = 0; n < numHiddenNodes; n++) {
+        for (int o = 0; o < numOutputs; o++) {
+            outputWeights[n][o] = init_weight();
+        }
+    }
+
+    static const int numTrainingSets = 4;
+    /* numTrainingSets x numInputs */
+    /* TODO: make this dynamic */
+    double training_inputs[4][2] = { {0.0f,0.0f},{1.0f,0.0f},{0.0f,1.0f},{1.0f,1.0f} };
+    double training_outputs[4][2] = { {0.0f},{1.0f},{1.0f},{0.0f} };
+
+    // Iterate through the entire training for a number of epochs
+    int epochs = 10000;
+    for (int n=0; n < epochs; n++) {
+        // As per SGD, shuffle the order of the training set
+        int trainingSetOrder[] = {0,1,2,3};
+        /* TODO: implement this */
+        /* shuffle(trainingSetOrder,numTrainingSets); */
+
+        // Cycle through each of the training set elements
+        for (int x=0; x<numTrainingSets; x++) {
+            int i = trainingSetOrder[x];
+
+            // Compute hidden layer activation
+            for (int j=0; j<numHiddenNodes; j++) {
+                double activation=hiddenLayerBias[j];
+                for (int k=0; k<numInputs; k++) {
+                    activation+=training_inputs[i][k]*hiddenWeights[k][j];
+                }
+                hiddenLayer[j] = sigmoid(activation);
+            }
+
+            // Compute output layer activation
+            for (int j=0; j<numOutputs; j++) {
+                double activation=outputLayerBias[j];
+                for (int k=0; k<numHiddenNodes; k++) {
+                    activation+=hiddenLayer[k]*outputWeights[k][j];
+                }
+                outputLayer[j] = sigmoid(activation);
+            }
+
+            // Compute change in output weights
+            double deltaOutput[numOutputs];
+            for (int j=0; j<numOutputs; j++) {
+                double dError = (training_outputs[i][j]-outputLayer[j]);
+                deltaOutput[j] = dError*dSigmoid(outputLayer[j]);
+            }
+
+            // Compute change in hidden weights
+            double deltaHidden[numHiddenNodes];
+            for (int j=0; j<numHiddenNodes; j++) {
+                double dError = 0.0f;
+                for(int k=0; k<numOutputs; k++) {
+                    dError+=deltaOutput[k]*outputWeights[j][k];
+                }
+                deltaHidden[j] = dError*dSigmoid(hiddenLayer[j]);
+            }
+
+            double lr = 0.1;
+            // Apply change in output weights
+            for (int j=0; j<numOutputs; j++) {
+                outputLayerBias[j] += deltaOutput[j]*lr;
+                for (int k=0; k<numHiddenNodes; k++) {
+                    outputWeights[k][j]+=hiddenLayer[k]*deltaOutput[j]*lr;
+                }
+            }
+            // Apply change in hidden weights
+            for (int j=0; j<numHiddenNodes; j++) {
+                hiddenLayerBias[j] += deltaHidden[j]*lr;
+                for(int k=0; k<numInputs; k++) {
+                    hiddenWeights[k][j]+=training_inputs[i][k]*deltaHidden[j]*lr;
+                }
+            }
+        }
+
+        usleep(1000000);
+    }
+}
+
+void idle(void)
+{
+    glutPostRedisplay();
+}
+
+void coroutine(void)
+{
+    debug("starting coroutine\n");
+    /* while (1) { */
+    /*     for (int n = 0; n < data_size; n++) { */
+    /*         int val = rand(); */
+    /*         /1* printf("setting data[%d] to %d\n", n, val); *1/ */
+    /*         data[n] = val; */
+    /*     } */
+    /*     usleep(1000000); */
+    /* } */
+    nn_sgd();
+}
+
+/* TODO: fix this */
+#define MAP_ANONYMOUS 0x20
+
 int main(int argc, char** argv)
 {
-    glutInit(&argc, argv);
-    glutInitDisplayMode(GLUT_RGBA | GLUT_DOUBLE | GLUT_DEPTH);
-    glutInitWindowSize(500, 500);
-    glutInitWindowPosition(50, 50);
-    glutCreateWindow("memories");
-    init();
-    glutDisplayFunc(display);
-    glutReshapeFunc(reshape);
-    glutKeyboardFunc(keyboard);
-    glutMainLoop();
+    data = mmap(NULL, sizeof *data, PROT_READ | PROT_WRITE, MAP_SHARED |
+            MAP_ANONYMOUS, -1, 0);
+
+    if (fork() == 0) {
+        glutInit(&argc, argv);
+        glutInitDisplayMode(GLUT_RGBA | GLUT_DOUBLE | GLUT_DEPTH);
+        glutInitWindowSize(500, 500);
+        glutInitWindowPosition(50, 50);
+        glutCreateWindow("memories");
+        init();
+        glutDisplayFunc(display);
+        glutReshapeFunc(reshape);
+        glutKeyboardFunc(keyboard);
+        glutIdleFunc(idle);
+        glutMainLoop();
+    } else {
+        coroutine();
+    }
 
     return 0;
 }
