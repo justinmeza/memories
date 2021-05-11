@@ -403,7 +403,7 @@ void keyboard(unsigned char key, int x, int y)
                 for (y = 0; y < height; y++) {
                     png_byte* row =
                         png_malloc(png, sizeof(uint8_t) * width * 4);
-                    rows[y] = row;
+                    rows[height - y - 1] = row;
                     for (x = 0; x < width; x++) {
                         unsigned char* pixel = pixels + ((y * width) + x) * 4;
                         *row++ = pixel[0];
