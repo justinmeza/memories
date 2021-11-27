@@ -1,5 +1,5 @@
-/* memories visualizes the contents of main memory.
-*/
+/* memories -- visualize the contents of main memory.
+ */
 
 #include <GL/glut.h>
 #include <math.h>
@@ -32,7 +32,8 @@ void debug(char* msg, ...)
 #endif
 }
 
-/* TODO: debug how to include these definitions from /usr/include/x86_64-linux-gnu/sys/ucontext.h */
+/* TODO: debug how to include these definitions from
+ * /usr/include/x86_64-linux-gnu/sys/ucontext.h */
 enum
 {
   REG_R8 = 0,
@@ -98,12 +99,17 @@ void handler(int num, siginfo_t* info, void* context)
 const int data_size = 1 << 20;
 static int* data;
 void init_data() {
-    /* data = malloc(sizeof(int) * data_size); */
+    /* zero'd pre-allocated data */
     for (int n = 0; n < data_size; n++) {
-        /* data[n] = rand(); */
         data[n] = 0;
-        /* printf("n = %d, data[n] = %d\n", n, data[n]); */
     }
+
+    /* /1* random'd un-allocated data *1/ */
+    /* data = malloc(sizeof(int) * data_size); */
+    /* for (int n = 0; n < data_size; n++) { */
+    /*     data[n] = rand(); */
+    /*     printf("n = %d, data[n] = %d\n", n, data[n]); */
+    /* } */
 }
 
 int* base;
@@ -111,8 +117,6 @@ int* base;
 void init(void)
 {
     glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
-    /* glClearColor(1.0f, 1.0f, 1.0f, 1.0f); */
-    /* glClearDepth(1.0f); */
     glEnable(GL_DEPTH_TEST);
     glEnable(GL_DEPTH_CLAMP);
     glDepthFunc(GL_LEQUAL);
@@ -120,7 +124,6 @@ void init(void)
     glHint(GL_PERSPECTIVE_CORRECTION_HINT, GL_NICEST);
 
     srand(time(NULL));
-    /* init_data(); */
     base = data;
 
     /* set up the signal handler */
@@ -131,7 +134,8 @@ void init(void)
     sigaction(SIGSEGV, &action, NULL);
 }
 
-/* x points rightward, out of the screen
+/* axis orientation:
+ * x points rightward, out of the screen
  * y points leftward, out of the screen
  * z points upward, parallel to the screen
  */
@@ -144,7 +148,7 @@ void draw_cube(int x, int y, int z, float r, float g, float b, float a)
     glTranslated(z * cube_size, y * cube_size, x * cube_size);
     glColor4d(r, g, b, a);
     glutSolidCube(cube_size - cube_padding);
-    /* glutWireCube(1); */
+    /* glutWireCube(1);  // wireframe */
     glPopMatrix();
 }
 
@@ -159,7 +163,9 @@ int z_toggle = 0xffffffff;
 int* compute_addr(int* base, int x, int y, int z) {
     int offset = (z + z_offset) * (x_size * y_size) \
                  + (y + y_offset) * y_size + (x + x_offset);
-    unsigned int* addr = base + offset;
+    unsigned int* addr = (unsigned int*)base + offset;
+    /* printf("offset = %d, data[offset] = %d\n", offset, *addr);  // debug */
+    /* fflush(stdout);  // debug */
     return addr;
 }
 
@@ -181,46 +187,27 @@ void display() {
     glEnable(GL_BLEND);
     glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 
-    /* glClearColor(0.0, 0.0, 0.0, 1.0); */
-    /* glClear(GL_COLOR_BUFFER_BIT); */
-
-    /* draw axes */
+    /* /1* draw axes *1/ */
     /* glBegin(GL_LINES); */
-
     /* glColor4d(1.0, 0.0, 0.0, 0.5); */
     /* glVertex3d(0.0, 0.0, 0.0); */
     /* glVertex3d(1.0, 0.0, 0.0); */
-
     /* glColor4d(0.0, 1.0, 0.0, 0.5); */
     /* glVertex3d(0.0, 0.0, 0.0); */
     /* glVertex3d(0.0, 1.0, 0.0); */
-
     /* glColor4d(0.0, 0.0, 1.0, 0.5); */
     /* glVertex3d(0.0, 0.0, 0.0); */
     /* glVertex3d(0.0, 0.0, 1.0); */
-
     /* glEnd(); */
 
     /* draw a range of memory */
-
     for (int z = 0; z < z_size; z++) {
         if (((z_toggle >> z) & 0x1) == 0) continue;
         for (int y = 0; y < y_size; y++) {
             for (int x = 0; x < z_size; x++) {
                 unsigned int* addr = compute_addr(base, x, y, z);
-                /* printf("offset = %d, data[offset] = %d\n", offset, *addr); */
-                /* fflush(stdout); */
-                /* unsigned char* color = (unsigned char*)addr; */
                 int r, g, b, a;
                 rgba(addr, &r, &g, &b, &a);
-                /* float r = r / 255.0; */
-                /* float g = g / 255.0; */
-                /* float b = b / 255.0; */
-                /* float a = a / 255.0; */
-                /* float r = color[0] / 255.0; */
-                /* float g = color[1] / 255.0; */
-                /* float b = color[2] / 255.0; */
-                /* float a = color[3] / 255.0; */
 
                 draw_cube(x, y, z, r / 255.0, g / 255.0, b / 255.0, a / 255.0);
             }
@@ -246,7 +233,6 @@ void reshape(GLsizei width, GLsizei height) {
     glLoadIdentity();
 
     /* place the camera at a distance to reduce near clipping */
-    /* float ortho = 10.0 * (y_size / 3.0); */
     float ortho = 50.0 * (1.0 / zoom);
 
     /* ensure unit axes are equal length on the screen */
@@ -257,9 +243,8 @@ void reshape(GLsizei width, GLsizei height) {
 
     /* set up an isometric projection matrix */
     gluLookAt(dist, dist, dist,  /* position of camera */
-            0.0,  0.0,  0.0,   /* where camera is pointing at */
-            1.0,  0.0,  0.0);  /* which direction is up */
-    /* glMatrixMode(GL_MODELVIEW); */
+              0.0,  0.0,  0.0,   /* where camera is pointing at */
+              1.0,  0.0,  0.0);  /* which direction is up */
 }
 
 extern char etext, edata, end;
@@ -430,7 +415,7 @@ void keyboard(unsigned char key, int x, int y)
     glutPostRedisplay();
 }
 
-/* coroutine definition */
+/* coroutine definitions */
 
 double sigmoid(double x) { return 1 / (1 + exp(-x)); }
 double dSigmoid(double x) { return x * (1 - x); }
@@ -457,19 +442,14 @@ int *map(int *data, int *offset, int size, int num)
     return addr;
 }
 
-/* From https://towardsdatascience.com/simple-neural-network-implementation-in-c-663f51447547 */
+/* algorithm courtesy of
+ * https://towardsdatascience.com/simple-neural-network-implementation-in-c-663f51447547
+ */
 void nn_sgd() {
     static const int numInputs = 2;
     static const int numHiddenNodes = 2;
     static const int numOutputs = 1;
-    /* double hiddenLayer[numHiddenNodes]; */
-    /* double outputLayer[numOutputs]; */
-    /* double hiddenLayerBias[numHiddenNodes]; */
-    /* double outputLayerBias[numOutputs]; */
-    /* double hiddenWeights[numInputs][numHiddenNodes]; */
-    /* double outputWeights[numHiddenNodes][numOutputs]; */
 
-    /* map the variables into data */
     int offset = 0;
     double *hiddenLayer = (double *)map(data, &offset, sizeof(double), numHiddenNodes);
     double *outputLayer = (double *)map(data, &offset, sizeof(double), numOutputs);
@@ -478,9 +458,6 @@ void nn_sgd() {
 
     double **hiddenWeights = (double **)map(data, &offset, sizeof(double *), numInputs);
     for (int n = 0; n < numInputs; n++) { hiddenWeights[n] = (double *)map(data, &offset, sizeof(double), numHiddenNodes); }
-
-    /* double **outputWeights = (double **)map(data, &offset, sizeof(double *), numHiddenNodes + 1); */
-    /* for (int n = 0; n < numHiddenNodes + 1; n++) { outputWeights[n] = (double *)map(data, &offset, sizeof(double), numOutputs); } */
 
     double **outputWeights = (double **)map(data, &offset, sizeof(double *), numHiddenNodes);
     for (int n = 0; n < numHiddenNodes; n++) { outputWeights[n] = (double *)map(data, &offset, sizeof(double), numOutputs); }
@@ -497,11 +474,6 @@ void nn_sgd() {
         }
     }
 
-    /* int **hiddenWeightsInt = (int **)map(data, &offset, sizeof(int *), numInputs); */
-    /* for (int n = 0; n < numInputs; n++) { hiddenWeightsInt[n] = (int *)map(data, &offset, sizeof(int), numHiddenNodes); } */
-
-    /* memset(outputWeights[numHiddenNodes], 0xffffffff, sizeof(int)); */
-
     static const int numTrainingSets = 4;
     double **training_inputs = (double **)map(data, &offset, sizeof(double *), numTrainingSets);
     for (int n = 0; n < numTrainingSets; n++) { training_inputs[n] = (double *)map(data, &offset, sizeof(double), numInputs); }
@@ -513,25 +485,19 @@ void nn_sgd() {
     training_inputs[1] = (double[2]){1.0f,0.0f};
     training_inputs[2] = (double[2]){0.0f,1.0f};
     training_inputs[3] = (double[2]){1.0f,1.0f};
-    /* memset(training_inputs[4], 0xffffffff, sizeof(double) * 2); */
     training_outputs[0] = (double[1]){0.0f};
     training_outputs[1] = (double[1]){1.0f};
     training_outputs[2] = (double[1]){1.0f};
     training_outputs[3] = (double[1]){0.0f};
-    /* memset(training_outputs[4], 0xffffffff, sizeof(double) * 1); */
 
-    // Iterate through the entire training for a number of epochs
     int epochs = 10000;
     for (int n=0; n < epochs; n++) {
-        // As per SGD, shuffle the order of the training set
         int trainingSetOrder[] = {0,1,2,3};
         shuffle(trainingSetOrder,numTrainingSets);
 
-        // Cycle through each of the training set elements
         for (int x=0; x<numTrainingSets; x++) {
             int i = trainingSetOrder[x];
 
-            // Compute hidden layer activation
             for (int j=0; j<numHiddenNodes; j++) {
                 double activation=hiddenLayerBias[j];
                 for (int k=0; k<numInputs; k++) {
@@ -540,7 +506,6 @@ void nn_sgd() {
                 hiddenLayer[j] = sigmoid(activation);
             }
 
-            // Compute output layer activation
             for (int j=0; j<numOutputs; j++) {
                 double activation=outputLayerBias[j];
                 for (int k=0; k<numHiddenNodes; k++) {
@@ -549,14 +514,12 @@ void nn_sgd() {
                 outputLayer[j] = sigmoid(activation);
             }
 
-            // Compute change in output weights
             double deltaOutput[numOutputs];
             for (int j=0; j<numOutputs; j++) {
                 double dError = (training_outputs[i][j]-outputLayer[j]);
                 deltaOutput[j] = dError*dSigmoid(outputLayer[j]);
             }
 
-            // Compute change in hidden weights
             double deltaHidden[numHiddenNodes];
             for (int j=0; j<numHiddenNodes; j++) {
                 double dError = 0.0f;
@@ -567,14 +530,12 @@ void nn_sgd() {
             }
 
             double lr = 0.1;
-            // Apply change in output weights
             for (int j=0; j<numOutputs; j++) {
                 outputLayerBias[j] += deltaOutput[j]*lr;
                 for (int k=0; k<numHiddenNodes; k++) {
                     outputWeights[k][j]+=hiddenLayer[k]*deltaOutput[j]*lr;
                 }
             }
-            // Apply change in hidden weights
             for (int j=0; j<numHiddenNodes; j++) {
                 hiddenLayerBias[j] += deltaHidden[j]*lr;
                 for(int k=0; k<numInputs; k++) {
@@ -596,6 +557,8 @@ void idle(void)
 void coroutine(void)
 {
     debug("starting coroutine\n");
+
+    /* /1* option 1: random values *1/ */
     /* while (1) { */
     /*     for (int n = 0; n < data_size; n++) { */
     /*         int val = rand(); */
@@ -604,14 +567,13 @@ void coroutine(void)
     /*     } */
     /*     usleep(1000000); */
     /* } */
+
+    /* option 2: neural network */
     nn_sgd();
 }
 
 int main(int argc, char** argv)
 {
-    /* data = mmap(NULL, sizeof *data, PROT_READ | PROT_WRITE, MAP_SHARED | */
-    /*         MAP_ANONYMOUS, -1, 0); */
-    /* data = malloc(sizeof(int) * data_size); */
     int f = open("/dev/zero", O_RDWR);
     data = mmap(NULL, sizeof(int) * data_size, PROT_READ | PROT_WRITE, MAP_SHARED, f, 0);
     init_data();
