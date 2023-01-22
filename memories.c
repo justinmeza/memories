@@ -1,4 +1,5 @@
-/* memories -- visualize the contents of main memory.
+/* memories -- Visualize the contents of main memory.
+ * Copyright 2021-2023 Justin J. Meza
  */
 
 #include <GL/glut.h>
@@ -8,6 +9,7 @@
 #include <signal.h>
 #include <stdarg.h>
 #include <stdio.h>
+#define __USE_GNU
 #include <stdlib.h>
 #include <string.h>
 #include <signal.h>
@@ -18,7 +20,7 @@
 #include <sys/wait.h>
 #include <unistd.h>
 
-#define DEBUG
+#undef DEBUG
 
 void debug(char* msg, ...)
 {
@@ -32,83 +34,31 @@ void debug(char* msg, ...)
 #endif
 }
 
-/* TODO: debug how to include these definitions from
- * /usr/include/x86_64-linux-gnu/sys/ucontext.h */
-enum
-{
-  REG_R8 = 0,
-# define REG_R8		REG_R8
-  REG_R9,
-# define REG_R9		REG_R9
-  REG_R10,
-# define REG_R10	REG_R10
-  REG_R11,
-# define REG_R11	REG_R11
-  REG_R12,
-# define REG_R12	REG_R12
-  REG_R13,
-# define REG_R13	REG_R13
-  REG_R14,
-# define REG_R14	REG_R14
-  REG_R15,
-# define REG_R15	REG_R15
-  REG_RDI,
-# define REG_RDI	REG_RDI
-  REG_RSI,
-# define REG_RSI	REG_RSI
-  REG_RBP,
-# define REG_RBP	REG_RBP
-  REG_RBX,
-# define REG_RBX	REG_RBX
-  REG_RDX,
-# define REG_RDX	REG_RDX
-  REG_RAX,
-# define REG_RAX	REG_RAX
-  REG_RCX,
-# define REG_RCX	REG_RCX
-  REG_RSP,
-# define REG_RSP	REG_RSP
-  REG_RIP,
-# define REG_RIP	REG_RIP
-  REG_EFL,
-# define REG_EFL	REG_EFL
-  REG_CSGSFS,		/* Actually short cs, gs, fs, __pad0.  */
-# define REG_CSGSFS	REG_CSGSFS
-  REG_ERR,
-# define REG_ERR	REG_ERR
-  REG_TRAPNO,
-# define REG_TRAPNO	REG_TRAPNO
-  REG_OLDMASK,
-# define REG_OLDMASK	REG_OLDMASK
-  REG_CR2
-# define REG_CR2	REG_CR2
-};
-
-/* segfault handler */
+/* Segfault handler. */
 void handler(int num, siginfo_t* info, void* context)
 {
     ucontext_t* c = (ucontext_t*)context;
 
-    /* increment the instruction pointer to get past the load */
+    /* Increment the instruction pointer to get past the load. */
     c->uc_mcontext.__gregs[REG_RIP]++;
 
-    /* provide a default value for the inaccessible location */
+    /* Provide a default value for the inaccessible location. */
     c->uc_mcontext.__gregs[REG_RAX] = 0x0;
 }
 
 const int data_size = 1 << 20;
 static int* data;
 void init_data() {
-    /* zero'd pre-allocated data */
+    /* Zero out pre-allocated data. */
     for (int n = 0; n < data_size; n++) {
         data[n] = 0;
     }
 
-    /* /1* random'd un-allocated data *1/ */
+    /* /1* Random out un-allocated data. *1/ */
     /* data = malloc(sizeof(int) * data_size); */
     /* for (int n = 0; n < data_size; n++) { */
     /*     data[n] = rand(); */
-    /*     printf("n = %d, data[n] = %d\n", n, data[n]); */
+    /*     debug("n = %d, data[n] = %d\n", n, data[n]); */
     /* } */
 }
 
@@ -134,10 +84,10 @@ void init(void)
     sigaction(SIGSEGV, &action, NULL);
 }
 
-/* axis orientation:
- * x points rightward, out of the screen
- * y points leftward, out of the screen
- * z points upward, parallel to the screen
+/* Axis orientation:
+ * - x points rightward, out of the screen,
+ * - y points leftward, out of the screen,
+ * - z points upward, parallel to the screen.
  */
 float cube_size = 2.0;
 float cube_padding = 0.0;
@@ -187,7 +137,7 @@ void display() {
     glEnable(GL_BLEND);
     glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 
-    /* /1* draw axes *1/ */
+    /* /1* Draw axes. *1/ */
     /* glBegin(GL_LINES); */
     /* glColor4d(1.0, 0.0, 0.0, 0.5); */
     /* glVertex3d(0.0, 0.0, 0.0); */
@@ -200,7 +150,7 @@ void display() {
     /* glVertex3d(0.0, 0.0, 1.0); */
     /* glEnd(); */
 
-    /* draw a range of memory */
+    /* Draw a range of memory. */
     for (int z = 0; z < z_size; z++) {
         if (((z_toggle >> z) & 0x1) == 0) continue;
         for (int y = 0; y < y_size; y++) {
@@ -226,25 +176,25 @@ float zoom = 1.0;
 void reshape(GLsizei width, GLsizei height) {
     GLfloat aspect = (GLfloat)width / (GLfloat)height;
 
-    /* render on entire window */
+    /* Render on entire window. */
     glViewport(0, 0, width, height);
 
     glMatrixMode(GL_PROJECTION);
     glLoadIdentity();
 
-    /* place the camera at a distance to reduce near clipping */
+    /* Place the camera at a distance to reduce near clipping. */
     float ortho = 50.0 * (1.0 / zoom);
 
-    /* ensure unit axes are equal length on the screen */
+    /* Ensure unit axes are equal length on the screen. */
     glOrtho(-ortho * aspect, ortho * aspect, -ortho, ortho, -ortho, ortho);
 
-    /* use this length so that camera is 1 unit away from origin */
+    /* Use this length so that camera is 1 unit away from origin. */
     double dist = sqrt(1 / 3.0);
 
-    /* set up an isometric projection matrix */
-    gluLookAt(dist, dist, dist,  /* position of camera */
-              0.0,  0.0,  0.0,   /* where camera is pointing at */
-              1.0,  0.0,  0.0);  /* which direction is up */
+    /* Set up an isometric projection matrix. */
+    gluLookAt(dist, dist, dist,  /* Position of camera. */
+              0.0,  0.0,  0.0,   /* Where camera is pointing at. */
+              1.0,  0.0,  0.0);  /* Which direction is up. */
 }
 
 extern char etext, edata, end;
@@ -252,38 +202,38 @@ extern char etext, edata, end;
 void keyboard(unsigned char key, int x, int y)
 {
     switch (key) {
-        /* quit */
+        /* Quit. */
         case 'q':
             exit(0);
-        /* scroll up by one block */
+        /* Scroll up by one block. */
         case 'j':
             z_offset--;
             break;
-        /* scroll down by one block */
+        /* Scroll down by one block. */
         case 'k':
             z_offset++;
             break;
-        /* scroll up by one chunk */
+        /* Scroll up by one chunk. */
         case 'b':
             z_offset = z_offset - z_size;
             break;
-        /* scroll down by one chunk */
+        /* Scroll down by one chunk. */
         case 'f':
             z_offset = z_offset + z_size;
             break;
-        /* zoom out by one block */
+        /* Zoom out by one block. */
         case '+':
             x_size--;
             y_size--;
             z_size--;
             break;
-        /* zoom in by one block */
+        /* Zoom in by one block. */
         case '-':
             x_size++;
             y_size++;
             z_size++;
             break;
-        /* toggle z layers */
+        /* Toggle z layers. */
         case '0':
         case '1':
         case '2':
@@ -299,7 +249,7 @@ void keyboard(unsigned char key, int x, int y)
                 z_toggle ^= (1 << index);
                 break;
             }
-        /* zoom in */
+        /* Zoom in. */
         case 'h':
             {
                 zoom -= 0.1;
@@ -320,47 +270,47 @@ void keyboard(unsigned char key, int x, int y)
                 reshape(width, height);
                 break;
             }
-        /* jump to text segment */
+        /* Jump to text segment. */
         case 't':
             base = (int *)&etext;
             x_offset = 0;
             y_offset = 0;
             z_offset = 0;
             break;
-        /* jump to data segment */
+        /* Jump to data segment. */
         case 'd':
             base = (int *)&edata;
             x_offset = 0;
             y_offset = 0;
             z_offset = 0;
             break;
-        /* jump to end segment */
+        /* Jump to end segment. */
         case 'e':
             base = (int *)&end;
             x_offset = 0;
             y_offset = 0;
             z_offset = 0;
             break;
-        /* jump to address */
+        /* Jump to address. */
         case 'a':
             base = data;
             x_offset = 0;
             y_offset = 0;
             z_offset = 0;
             break;
-        /* take a snapshot */
+        /* Take a snapshot. */
         case 's':
             {
                 int screen[4];
                 glGetIntegerv(GL_VIEWPORT, screen);
 
-                /* read the image data */
+                /* Read the image data. */
                 int width = screen[2];
                 int height = screen[3];
                 unsigned char* pixels = malloc(sizeof(unsigned char) * width * height * 4);
                 glReadPixels(0, 0, width, height, GL_RGBA, GL_UNSIGNED_BYTE, pixels);
 
-                /* write the image data */
+                /* Write the image data. */
                 FILE* f;
 
                 char title[100];
@@ -415,7 +365,7 @@ void keyboard(unsigned char key, int x, int y)
     glutPostRedisplay();
 }
 
-/* coroutine definitions */
+/* Co-routine definitions. */
 
 double sigmoid(double x) { return 1 / (1 + exp(-x)); }
 double dSigmoid(double x) { return x * (1 - x); }
@@ -442,8 +392,8 @@ int *map(int *data, int *offset, int size, int num)
     return addr;
 }
 
-/* algorithm courtesy of
- * https://towardsdatascience.com/simple-neural-network-implementation-in-c-663f51447547
+/* Algorithm implementation based on:
+ * https://towardsdatascience.com/simple-neural-network-implementation-in-c-663f51447547.
  */
 void nn_sgd() {
     static const int numInputs = 2;
@@ -545,7 +495,7 @@ void nn_sgd() {
             }
         }
 
-        usleep(10000);
+        sleep(1);
     }
 }
 
@@ -556,19 +506,19 @@ void idle(void)
 
 void coroutine(void)
 {
-    debug("starting coroutine\n");
+    debug("Starting co-routine...\n");
 
-    /* /1* option 1: random values *1/ */
+    /* /1* Option 1: random values *1/ */
     /* while (1) { */
     /*     for (int n = 0; n < data_size; n++) { */
     /*         int val = rand(); */
     /*         /1* printf("setting data[%d] to %d\n", n, val); *1/ */
     /*         data[n] = val; */
     /*     } */
-    /*     usleep(1000000); */
+    /*     sleep(1); */
     /* } */
 
-    /* option 2: neural network */
+    /* Option 2: neural network. */
     nn_sgd();
 }
 
@@ -593,6 +543,10 @@ int main(int argc, char** argv)
         glutMainLoop();
     } else {
         coroutine();
+    /* /1* Zero out pre-allocated data. *1/ */
+    /* for (int n = 0; n < data_size; n++) { */
+    /*     data[n] = 0; */
+    /* } */
     }
 
     return 0;
